@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chess Puzzle App</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  </head>
+  <body>
+    <div id="view-home" class="view active">
+      <h1>Chess Puzzle App</h1>
+      <button class="main-btn" onclick="nav('view-maker')">Make Puzzle</button>
+      <button class="main-btn" onclick="nav('view-list')">Solve Puzzles</button>
+    </div>
+
+    <div id="view-maker" class="view">
+      <div class="header">
+        <button class="back-btn" onclick="nav('view-home')">Back</button>
+        <h2>Puzzle Maker</h2>
+        <button onclick="toggleMute()" class="mute-btn">
+          <img class="mute-icon" src="images/speaker-on.svg" alt="Mute" />
+        </button>
+      </div>
+      <div class="maker-layout">
+        <div class="board-area">
+          <div class="eval-bar-container">
+            <div id="maker-eval-score" class="eval-score">0.0</div>
+            <div id="maker-eval-black" class="eval-black"></div>
+            <div id="maker-eval-white" class="eval-white"></div>
+          </div>
+          <div class="board-column">
+            <div class="board-wrapper">
+              <div id="maker-board" class="chessboard"></div>
+              <svg id="maker-board-svg" class="arrows-svg"></svg>
+            </div>
+            <div id="piece-palette" class="piece-palette"></div>
+          </div>
+        </div>
+        <div class="maker-controls">
+          <label>Paste Puzzle Code to Adjust:</label>
+          <div style="display: flex; gap: 10px">
+            <input
+              type="text"
+              id="maker-load-code"
+              placeholder="Paste code here..."
+              style="flex: 1"
+            />
+            <button onclick="loadMakerFromCode()">Load</button>
+          </div>
+
+          <label>FEN String:</label>
+          <input
+            type="text"
+            id="fen-input"
+            value="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+          />
+          <div style="display: flex; gap: 10px">
+            <button onclick="loadMakerFEN()" style="flex: 1">Load Board</button>
+            <button onclick="toggleMakerFlip()" style="flex: 1">
+              Flip Board
+            </button>
+          </div>
+
+          <label>How many moves does it take:</label>
+          <input type="number" id="moves-required" value="2" />
+
+          <label>Show moves before puzzle starts (e.g., e2e4, e7e5):</label>
+          <input type="text" id="pre-moves" placeholder="None" />
+
+          <label>How many top moves are correct:</label>
+          <input type="number" id="top-moves" value="1" />
+
+          <label>Hints (comma separated):</label>
+          <textarea
+            id="hints-input"
+            placeholder="Hint 1, Hint 2, Hint 3"
+          ></textarea>
+
+          <label>Solution (UCI format: (e2e4, e7e5) ; explanation):</label>
+          <textarea
+            id="solution-input"
+            placeholder="(e2e4, e7e5), (d2d4); This is a good opening."
+          ></textarea>
+          <small style="color: #aaa; margin-top: -5px"
+            >Play in Preview mode to auto-record moves here.</small
+          >
+
+          <label
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              cursor: pointer;
+              margin-top: 5px;
+            "
+          >
+            <input
+              type="checkbox"
+              id="bot-moves-included"
+              style="width: auto; transform: scale(1.2)"
+            />
+            <span>Include Bot Moves in Solution</span>
+          </label>
+
+          <label>What went wrong (leave blank if none):</label>
+          <textarea id="wrong-input"></textarea>
+
+          <button
+            id="btn-preview"
+            onclick="togglePreview()"
+            style="background-color: #4caf50; color: white"
+          >
+            Preview Puzzle
+          </button>
+          <p
+            id="maker-preview-status"
+            style="color: #4caf50; font-weight: bold; margin: 5px 0"
+          ></p>
+
+          <button
+            onclick="generateCode()"
+            style="background-color: #2196f3; color: white"
+          >
+            Get Code
+          </button>
+          <div style="display: flex; gap: 10px">
+            <input
+              type="text"
+              id="generated-code"
+              readonly
+              placeholder="Generated code will appear here"
+              style="flex: 1"
+            />
+            <button
+              onclick="copyGeneratedCode()"
+              class="action-btn"
+              style="background: #444; border: 1px solid #555"
+            >
+              <img
+                src="images/copy.svg"
+                alt="Copy"
+                style="width: 20px; filter: invert(1)"
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-list" class="view">
+      <div class="header">
+        <button class="back-btn" onclick="nav('view-home')">Back</button>
+        <h2>Your Puzzles</h2>
+        <div id="completion-status">Completed: 0 | Not Completed: 0</div>
+      </div>
+      <div class="list-layout">
+        <div class="puzzle-list" id="puzzle-list-container"></div>
+        <div class="load-puzzle-section">
+          <h3>Load New Puzzle</h3>
+          <textarea
+            id="load-code-input"
+            placeholder="Paste puzzle code here..."
+          ></textarea>
+          <button onclick="loadPuzzleFromCode()">Load Puzzle</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-solver" class="view">
+      <div class="header">
+        <button id="solver-back-btn" class="back-btn" onclick="exitSolver()">
+          Back
+        </button>
+        <input
+          type="text"
+          id="solver-title-input"
+          class="solver-title-input"
+          value="Puzzle Title"
+        />
+        <button onclick="toggleMute()" class="mute-btn">
+          <img class="mute-icon" src="images/speaker-on.svg" alt="Mute" />
+        </button>
+      </div>
+      <div class="solver-layout">
+        <div class="board-area">
+          <div class="eval-bar-container">
+            <div id="solver-eval-score" class="eval-score">0.0</div>
+            <div id="solver-eval-black" class="eval-black"></div>
+            <div id="solver-eval-white" class="eval-white"></div>
+          </div>
+          <div class="board-wrapper">
+            <div id="solver-board" class="chessboard"></div>
+            <svg id="solver-board-svg" class="arrows-svg"></svg>
+          </div>
+        </div>
+        <div class="solver-controls">
+          <div class="status-box">
+            <p id="solver-turn-text">White to move</p>
+            <p id="solver-wrong-text"></p>
+          </div>
+          <div id="hint-bubble" class="hint-bubble hidden">
+            Hint: <span id="hint-text"></span>
+          </div>
+          <div class="navigation-arrows">
+            <button id="btn-prev" onclick="navMove('prev')" class="hidden">
+              ←
+            </button>
+            <button id="btn-next" onclick="navMove('next')" class="hidden">
+              →
+            </button>
+          </div>
+          <div class="action-buttons">
+            <button
+              id="btn-reset"
+              onclick="resetSolver()"
+              style="background-color: #ff9800; color: white"
+            >
+              Reset
+            </button>
+            <button id="btn-hint" onclick="showHint()">💡 Hint (3)</button>
+            <button id="btn-solution" onclick="showSolution()">Solution</button>
+          </div>
+          <textarea
+            id="explanation-box"
+            readonly
+            class="hidden"
+            placeholder="Explanation here..."
+          ></textarea>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
