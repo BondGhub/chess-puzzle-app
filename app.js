@@ -1,6 +1,6 @@
 console.log("app.js loaded successfully (New Compression Version)");
 
-// LOCAL LZW COMPRESSION ENGINE (for string compression)
+// LOCAL LZW COMPRESSION ENGINE
 function lzwCompress(str) {
   var dictionary = {};
   var phrase = "";
@@ -196,50 +196,68 @@ const boardArrows = { "maker-board": [], "solver-board": [] };
 let originalSolverFen = "";
 let originalMovesRequired = 0;
 
-// 3. STOCKFISH INITIALIZATION
+// 3. STOCKFISH INITIALIZATION (Using Blob URL to bypass CORS)
 let stockfish = null;
 let engineQueue = [];
 let isEngineCalculating = false;
 let currentMultiPvMoves = [];
 
-try {
-  stockfish = new Worker("stockfish/stockfish.js");
-  stockfish.onmessage = function (event) {
-    const line = event.data;
-    if (typeof line !== "string") return;
+if (window.location.protocol !== "file:") {
+  const stockfishCdnUrl =
+    "https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js";
 
-    if (line.includes("info depth") && line.includes("multipv")) {
-      let pvMatch = line.match(/ pv (\w{4,5})/);
-      if (pvMatch) {
-        let multipvMatch = line.match(/multipv (\d+)/);
-        let index = multipvMatch ? parseInt(multipvMatch[1]) - 1 : 0;
-        currentMultiPvMoves[index] = pvMatch[1];
-      }
-    }
+  fetch(stockfishCdnUrl)
+    .then((response) => response.text())
+    .then((scriptContent) => {
+      const blob = new Blob([scriptContent], {
+        type: "application/javascript",
+      });
+      const blobUrl = URL.createObjectURL(blob);
 
-    if (line.includes("info depth") && line.includes("score")) {
-      let cpMatch = line.match(/score cp (-?\d+)/);
-      let mateMatch = line.match(/score mate (-?\d+)/);
-      let turn = chess.turn();
-      if (cpMatch) updateEvalUI(parseInt(cpMatch[1]), turn);
-      else if (mateMatch) updateEvalMate(parseInt(mateMatch[1]), turn);
-    }
+      stockfish = new Worker(blobUrl);
+      URL.revokeObjectURL(blobUrl);
 
-    if (line.includes("bestmove")) {
-      isEngineCalculating = false;
-      let bm = line.split(" ")[1];
-      if (bm && bm !== "(none)") currentMultiPvMoves[0] = bm;
-      if (engineQueue.length > 0) {
-        let req = engineQueue.shift();
-        if (req.resolve) req.resolve(currentMultiPvMoves);
-      }
-      currentMultiPvMoves = [];
-      processEngineQueue();
-    }
-  };
-} catch (e) {
-  console.warn("Local Stockfish failed to load.", e);
-  stockfish = null;
+      stockfish.onmessage = function (event) {
+        const line = event.data;
+        if (typeof line !== "string") return;
+
+        if (line.includes("info depth") && line.includes("multipv")) {
+          let pvMatch = line.match(/ pv (\w{4,5})/);
+          if (pvMatch) {
+            let multipvMatch = line.match(/multipv (\d+)/);
+            let index = multipvMatch ? parseInt(multipvMatch[1]) - 1 : 0;
+            currentMultiPvMoves[index] = pvMatch[1];
+          }
+        }
+
+        if (line.includes("info depth") && line.includes("score")) {
+          let cpMatch = line.match(/score cp (-?\d+)/);
+          let mateMatch = line.match(/score mate (-?\d+)/);
+          let turn = chess.turn();
+          if (cpMatch) updateEvalUI(parseInt(cpMatch[1]), turn);
+          else if (mateMatch) updateEvalMate(parseInt(mateMatch[1]), turn);
+        }
+
+        if (line.includes("bestmove")) {
+          isEngineCalculating = false;
+          let bm = line.split(" ")[1];
+          if (bm && bm !== "(none)") currentMultiPvMoves[0] = bm;
+          if (engineQueue.length > 0) {
+            let req = engineQueue.shift();
+            if (req.resolve) req.resolve(currentMultiPvMoves);
+          }
+          currentMultiPvMoves = [];
+          processEngineQueue();
+        }
+      };
+      console.log("Stockfish loaded successfully via Blob URL.");
+    })
+    .catch((error) => {
+      console.warn("Stockfish failed to load via Blob URL.", error);
+      stockfish = null;
+    });
+} else {
+  console.log("Running via file:// - Stockfish engine disabled for stability.");
 }
 
 function getEngineMoves(fen, multipv = 1, timeoutMs = 4000) {
